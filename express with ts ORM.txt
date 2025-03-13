@@ -1,0 +1,269 @@
+EXPRESS WITH TYPESCRIPT WITH SEQULIZE ORM WITH MYSQL
+
+> mkdir project name
+> cd project name
+
+> npm init -y
+> npm install express sequelize mysql2 dotenv
+> npm install --save-dev typescript  ts-node @types/node @types/express @types/ sequelize
+
+>Then create tsconfig.json file 
+   :inside file wirte code of 
+//start      
+  {
+    "compilerOptions": {
+        "target": "ES2020",
+        "module": "commonjs",
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "outDir": "./dist"
+    },
+    "include": ["src/**/*"]
+} 
+//end
+--------------------------------------------------------------------------------------------------------
+> Then create a folder structure inside vs code
+         src/       --/folder
+           > app.ts
+           > server.ts
+       
+  config/     --/folder inside src
+           > database.ts
+           > dotenv.ts
+
+  controller/   --/folder
+          >userController.ts
+
+   models/     --/folder
+         >userRoutes.ts
+
+>Then create .env file outside src
+      .env   --/code is :
+ DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD="synamen"
+DB_NAME="express_ts_orm"
+PORT=3000
+ -----------------------------------------------------------------
+ >Then connecting to the Database
+In  src/config/database.ts : 
+        import { Sequelize } from "sequelize";
+import dotenv from './dotenv';
+const sequelize = new Sequelize(
+    dotenv.DB_NAME, 
+    dotenv.DB_USER,
+    dotenv.DB_PASSWORD,
+    {
+        host: dotenv.DB_HOST,
+        dialect: "mysql"
+    }
+);
+export default sequelize;
+
+>Then  
+  in src/config/dotenv.ts :
+     import * as dotenv from 'dotenv';
+dotenv.config();
+export default {
+    DB_HOST: process.env.DB_HOST || "localhost" ,
+    DB_USER: process.env.DB_USER || "root" ,
+    DB_PASSWORD: process.env.DB_PASSWORD || "password",
+    DB_NAME: process.env.DB_NAME || "yourdatabase",
+    PORT: process.env.PORT || 3000
+}
+-----------------------------------------------------------
+>Then Model
+    in src/model/userModel.ts :
+           import { DataTypes, Model, Optional } from "sequelize";
+import sequelize from "../config/database";
+//Define an interface for User attributes
+interface UserAttributes {
+    id: number;
+    name : string;
+    email : string;
+    password : string;
+}
+//Define an interface for User cration attributs (optional id)
+interface UserCreationAttributes extends Optional<UserAttributes, "id"> {}
+//Define a class that extends the sequelize model class
+class User 
+  extends Model<UserAttributes, UserCreationAttributes >
+  implements UserAttributes
+  {
+    public id! : number;
+    public name! : string;
+    public email! : string;
+    public password! : string;
+  }
+//Initialize the User Model
+User.init(
+    {
+        id:{
+            type: DataTypes.INTEGER.UNSIGNED,
+            autoIncrement: true,
+            primaryKey: true
+        },
+        name: {
+            type: DataTypes.STRING(128),
+            allowNull: false
+        },
+        email: {
+            type: DataTypes.STRING(128),
+            allowNull: false,
+            unique: true
+        },
+        password: {
+            type: DataTypes.STRING(128),
+            allowNull: false
+        }
+    },
+    {
+        tableName: "users",
+        sequelize // passing the 'sequelize' instance is required
+    }
+);
+export default User;  
+-------------------------------------------------------------
+>Then controller
+     /src/controller/userController.ts :
+         import { Request, Response } from "express";
+import User from "../models/userModel";
+//Create
+export const createUser = async (
+req: Request,
+res: Response,
+): Promise<void> => {
+    const {name, email, password} = req.body;
+      try {
+        const user = await User.create({name, email, password });
+        res.status(201).json(user);
+      }catch (err: any) {
+        res.status(500).json({message: err.message});
+      }
+};
+
+//Get
+export const getUsers = async (_req: Request, res: Response): Promise<void> => {
+    try {
+        const users = await User.findAll();
+        res.status(200).json(users);
+    }catch (err: any){
+        res.status(500).json({message: err.message});
+    }
+};
+
+//Get By Id
+export const getUser = async (req: Request, res:Response): Promise<void> => {
+    try{
+        const user = await User.findByPk(req.params.id);
+        if (user) {
+            res.status(200).json(user);
+        }else {
+            res.status(400).json({message : "user not found"});
+        }
+    }catch (err: any){
+        res.status(500).json({message: err.message});
+    }
+};
+
+//update
+export const updateUser = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    try {
+        const [updated] = await User.update(req.body, {
+            where : {id: req.params.id}
+        });
+        if (updated) {
+            const updateUser = await User.findByPk(req.params.id);
+            res.status(200).json(updateUser);
+        }else {
+            res.status(404).json({message: "User not found"});
+        }
+    }catch (err : any) {
+        res.status(500).json({message: err.message})
+    }
+};
+
+//Delete
+export const deleteUser = async (
+    req : Request,
+    res : Response
+): Promise<void> => {
+    try {
+        const deleted =await User.destroy({
+            where: {id:req.params.id},
+        });
+        if (deleted) {
+            res.status(200).json({message: "User deleted"});
+        }else {
+            res.status(404).json({message: "User not found"});
+        }
+    }catch (err : any) {
+           res.status(500).json({message: err.message});    
+        }
+    };
+---------------------------------------------------------------------------
+>>Then setting up Routes
+      /src/routes/userRoutes :
+      import { Router } from "express";
+import {
+    createUser,
+    getUsers,
+    getUser,
+    updateUser,
+    deleteUser
+} from "../controllers/userController";
+const router: Router = Router();
+router.post("/", createUser);
+router.get("/", getUsers);
+router.get("/:id", getUser);
+router.put("/:id", updateUser);
+router.delete("/:id", deleteUser);
+export default router;
+-----------------------------------------------------------------------
+
+>>Then in src/app.ts :
+   import express, {Application} from 'express';
+import sequelize from './config/database';
+import userRoutes from './routes/userRoutes';
+
+//create Express app
+const app: Application = express();
+
+//Middleware
+app.use(express.json());
+
+//Routes
+app.use('/api/users', userRoutes);
+
+//Sync database
+ sequelize.sync().then(() => {
+    console.log('Database & tables created!');
+ });
+ export default app;
+   
+>> Then /src/server.ts  file :
+  import app from './app';
+import dotenv from './config/dotenv';
+const PORT = dotenv.PORT;
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
+
+>> Then Add scripts to your package json
+         "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "ts-node src/server.ts",
+    "build": "tsc",
+    "serve": "node dist/server.js"
+  },
+
+>> Then = (npm start) in terminal
+
+>> Then in thunder client check api response
+       http://localhost:3000/api/users/
+
+            
